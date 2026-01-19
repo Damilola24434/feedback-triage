@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Feedback Triage — Cloudflare MVP</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --panel:#ffffff;
+      --text:#0b1220;
+      --muted:#5c667a;
+      --line:#e6e8ee;
+      --soft:#f6f7fb;
+
+      /* Cloudflare-ish accent */
+      --accent:#f38020;
+      --accent-ink:#9b4d0b;
+
+      --good:#137333;
+      --warn:#b06000;
+      --bad:#b42318;
+
+      --radius:14px;
+      --shadow:0 6px 20px rgba(11,18,32,.06);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:var(--sans);
+      color:var(--text);
+      background:linear-gradient(180deg, #fff 0%, #fff 70%, #fafbff 100%);
+    }
+    .wrap{
+      max-width:1120px;
+      margin:0 auto;
+      padding:28px 18px 40px;
+    }
+
+    header{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:16px;
+    }
+    .brand{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .brand h1{
+      margin:0;
+      font-size:22px;
+      letter-spacing:-.2px;
+    }
+    .brand p{
+      margin:0;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.4;
+      max-width:78ch;
+    }
+    .status{
+      font-family:var(--mono);
+      font-size:12px;
+      color:var(--muted);
+      background:var(--soft);
+      border:1px solid var(--line);
+      padding:10px 12px;
+      border-radius:999px;
+      white-space:nowrap;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 380px;
+      gap:16px;
+    }
+    @media (max-width: 980px){
+      .grid{grid-template-columns:1fr}
+    }
+
+    .card{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .card .hd{
+      padding:14px 14px 10px;
+      border-bottom:1px solid var(--line);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .card .hd h2{
+      margin:0;
+      font-size:13px;
+      letter-spacing:.2px;
+      text-transform:uppercase;
+      color:var(--muted);
+    }
+    .card .bd{ padding:14px; }
+
+    .toolbar{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .toolbar .left, .toolbar .right{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+
+    input, select, textarea{
+      border:1px solid var(--line);
+      background:#fff;
+      padding:10px 10px;
+      border-radius:12px;
+      font-size:14px;
+      outline:none;
+    }
+    input:focus, select:focus, textarea:focus{
+      border-color:rgba(243,128,32,.55);
+      box-shadow:0 0 0 3px rgba(243,128,32,.12);
+    }
+
+    button{
+      border:1px solid var(--line);
+      background:#fff;
+      padding:10px 12px;
+      border-radius:12px;
+      font-weight:600;
+      font-size:13px;
+      cursor:pointer;
+    }
+    button:hover{ background:var(--soft); }
+    button:disabled{ cursor:not-allowed; opacity:.6; }
+
+    .primary{
+      border-color:rgba(243,128,32,.35);
+      background:rgba(243,128,32,.10);
+      color:var(--accent-ink);
+    }
+    .primary:hover{ background:rgba(243,128,32,.14); }
+
+    .mini{
+      font-size:12px;
+      padding:8px 10px;
+      border-radius:10px;
+    }
+
+    /* table */
+    .tableWrap{
+      margin-top:12px;
+      overflow:auto;
+      max-height:560px;
+      border:1px solid var(--line);
+      border-radius:12px;
+    }
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      font-size:13px;
+    }
+    th{
+      text-align:left;
+      color:var(--muted);
+      font-weight:600;
+      font-size:12px;
+      padding:10px 10px;
+      border-bottom:1px solid var(--line);
+      background:#fff;
+      position:sticky;
+      top:0;
+      z-index:1;
+    }
+    td{
+      padding:12px 10px;
+      border-bottom:1px solid var(--line);
+      vertical-align:top;
+    }
+    tr:hover td{ background:#fcfdff; }
+
+    .source{
+      font-family:var(--mono);
+      font-size:12px;
+      color:var(--muted);
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      padding:5px 9px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      font-size:12px;
+      color:var(--muted);
+      background:#fff;
+      white-space:nowrap;
+    }
+    .pill.good{ color:var(--good); border-color:rgba(19,115,51,.25); background:rgba(19,115,51,.06); }
+    .pill.warn{ color:var(--warn); border-color:rgba(176,96,0,.25); background:rgba(176,96,0,.06); }
+    .pill.bad{  color:var(--bad);  border-color:rgba(180,35,24,.25); background:rgba(180,35,24,.06); }
+
+    .tags{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      margin-top:6px;
+    }
+    .tag{
+      font-size:12px;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:var(--soft);
+      color:var(--muted);
+    }
+
+    .muted{ color:var(--muted); }
+    .small{ font-size:12px; }
+    .nowrap{ white-space:nowrap; }
+    .empty{
+      padding:18px;
+      color:var(--muted);
+      font-size:13px;
+      text-align:center;
+    }
+    .toast{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:var(--soft);
+      color:var(--muted);
+      font-size:12px;
+      display:none;
+      line-height:1.35;
+    }
+    .toast.show{ display:block; }
+
+    .score{
+      font-family:var(--mono);
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    /* Problapary chat (ChatGPT-style) */
+    .chatShell{
+      display:flex;
+      flex-direction:column;
+      height:480px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      overflow:hidden;
+      background:#fff;
+    }
+    @media (max-width: 1200px){
+      .chatShell{ height:450px; }
+    }
+    @media (max-width: 768px){
+      .chatShell{ height:380px; }
+    }
+    @media (max-width: 480px){
+      .chatShell{ height:320px; }
+    }
+
+    .chatTop{
+      padding:10px 12px 8px;
+      border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg,#fff, #fbfbfe);
+      flex-shrink:0;
+    }
+    .chatTop h3{
+      margin:0;
+      font-size:14px;
+      letter-spacing:-.2px;
+    }
+    .chatTop p{
+      margin:4px 0 0;
+      font-size:11px;
+      color:var(--muted);
+      line-height:1.3;
+    }
+    @media (max-width: 480px){
+      .chatTop{
+        padding:8px 10px 6px;
+      }
+      .chatTop h3{
+        font-size:13px;
+      }
+      .chatTop p{
+        font-size:10px;
+      }
+    }
+
+    .chatMsgs{
+      flex:1;
+      overflow-y:auto;
+      overflow-x:hidden;
+      padding:10px;
+      background:#fff;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      min-height:0;
+    }
+    @media (max-width: 480px){
+      .chatMsgs{
+        padding:8px;
+        gap:4px;
+      }
+    }
+
+    .msgRow{
+      display:flex;
+      flex-shrink:0;
+      animation:slideIn 0.2s ease-out;
+    }
+    @keyframes slideIn{
+      from{
+        opacity:0;
+        transform:translateY(8px);
+      }
+      to{
+        opacity:1;
+        transform:translateY(0);
+      }
+    }
+    .msgRow.user{ justify-content:flex-end; }
+    
+    .bubble{
+      max-width:85%;
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      font-size:12px;
+      line-height:1.4;
+      word-wrap:break-word;
+      overflow-wrap:break-word;
+    }
+    @media (max-width: 480px){
+      .bubble{
+        max-width:90%;
+        font-size:11px;
+        padding:6px 8px;
+      }
+    }
+
+    .bubble.user{
+      background:rgba(243,128,32,.10);
+      border-color:rgba(243,128,32,.22);
+      color:var(--accent-ink);
+    }
+    .bubble.bot{
+      background:var(--soft);
+      color:var(--text);
+    }
+
+    .chatBar{
+      border-top:1px solid var(--line);
+      padding:8px;
+      background:#fff;
+      flex-shrink:0;
+    }
+    .chatBarInner{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    
+    .chatInput{
+      width:100%;
+      min-height:32px;
+      max-height:80px;
+      resize:vertical;
+      font-size:12px;
+      line-height:1.3;
+      padding:6px 8px;
+      border:1px solid var(--line);
+      border-radius:8px;
+      font-family:inherit;
+      box-sizing:border-box;
+    }
+    @media (max-width: 480px){
+      .chatInput{
+        min-height:28px;
+        max-height:70px;
+        font-size:11px;
+        padding:4px 6px;
+      }
+    }
+    
+    .chatInput:focus{
+      border-color:rgba(243,128,32,.55);
+      box-shadow:0 0 0 2px rgba(243,128,32,.12);
+      outline:none;
+    }
+
+    .chatBtns{
+      display:flex;
+      gap:6px;
+      justify-content:flex-end;
+    }
+    .chatBtns button{
+      font-size:11px;
+      padding:6px 10px;
+    }
+    @media (max-width: 480px){
+      .chatBtns{
+        gap:4px;
+      }
+      .chatBtns button{
+        font-size:10px;
+        padding:4px 8px;
+        flex:1;
+      }
+    }
+
+    .kbd{
+      font-family:var(--mono);
+      background:rgba(243,128,32,.10);
+      border:1px solid rgba(243,128,32,.22);
+      color:var(--accent-ink);
+      padding:1px 4px;
+      border-radius:6px;
+      font-size:10px;
+      white-space:nowrap;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Feedback Triage</h1>
+        <p>
+          Feedback from multiple sources is triaged at ingestion time (AI extracts sentiment, urgency, value impact, themes).
+          The dashboard shows ranked signal so teams can prioritize quickly.
+        </p>
+      </div>
+      <div class="status" id="status">connecting…</div>
+    </header>
+
+    <div class="grid">
+      <!-- LEFT: feed -->
+      <section class="card">
+        <div class="hd">
+          <h2>Triaged feed</h2>
+          <div class="small muted" id="count">—</div>
+        </div>
+
+        <div class="bd" style="padding-top:12px;">
+          <div class="toolbar">
+            <div class="left">
+              <button class="primary" id="seedAllBtn" title="Seed a multi-source demo dataset (auto-triaged)">
+                Seed demo dataset
+              </button>
+              <button class="mini" id="refreshBtn" title="Refresh feed">Refresh</button>
+            </div>
+
+            <div class="right">
+              <input id="search" placeholder="Search text, theme, source…" style="width:280px" />
+              <select id="urgencyFilter" class="mini">
+                <option value="">Urgency: All</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+              <select id="sentimentFilter" class="mini">
+                <option value="">Sentiment: All</option>
+                <option value="negative">Negative</option>
+                <option value="neutral">Neutral</option>
+                <option value="positive">Positive</option>
+              </select>
+              <select id="sortMode" class="mini" title="Sort order">
+                <option value="ranked" selected>Sort: Ranked</option>
+                <option value="newest">Sort: Newest</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="toast" id="toast"></div>
+
+          <div class="tableWrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:70px">ID</th>
+                  <th style="width:90px">Score</th>
+                  <th style="width:130px">Source</th>
+                  <th>Summary</th>
+                  <th style="width:120px">Urgency</th>
+                  <th style="width:130px">Sentiment</th>
+                  <th style="width:220px">Themes</th>
+                </tr>
+              </thead>
+              <tbody id="tbody">
+                <tr><td colspan="7" class="empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="small muted" id="rankingHint" style="margin-top:10px; line-height:1.4;"></div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Problapary -->
+      <aside class="card">
+        <div class="hd">
+          <h2>Problapary</h2>
+          <div class="small muted">summaries only</div>
+        </div>
+        <div class="bd">
+          <div class="chatShell">
+            <div class="chatTop">
+              <h3>Ask Problapary</h3>
+              <p>
+                Problapary summarizes patterns across the triaged dataset (no IDs, no links).
+                Tip: click <span class="kbd">Seed demo dataset</span> first.
+              </p>
+            </div>
+
+            <div class="chatMsgs" id="chatMsgs"></div>
+
+            <div class="chatBar">
+              <div class="chatBarInner">
+                <textarea id="chatInput" class="chatInput" placeholder="Ask: top themes, most urgent issues, recurring problems…"></textarea>
+                <div class="chatBtns">
+                  <button class="mini" id="chatClearBtn">Clear</button>
+                  <button class="primary" id="chatSendBtn">Send</button>
+                </div>
+              </div>
+              <div class="small muted" style="margin-top:8px;">
+                Press <span class="kbd">Enter</span> to send, <span class="kbd">Shift</span>+<span class="kbd">Enter</span> for newline.
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+<script>
+  const API = "/api";
+
+  const statusEl = document.getElementById("status");
+  const toastEl = document.getElementById("toast");
+  const tbody = document.getElementById("tbody");
+  const countEl = document.getElementById("count");
+  const rankingHintEl = document.getElementById("rankingHint");
+
+  const seedAllBtn = document.getElementById("seedAllBtn");
+  const refreshBtn = document.getElementById("refreshBtn");
+
+  const searchEl = document.getElementById("search");
+  const urgencyFilterEl = document.getElementById("urgencyFilter");
+  const sentimentFilterEl = document.getElementById("sentimentFilter");
+  const sortModeEl = document.getElementById("sortMode");
+
+  const chatMsgs = document.getElementById("chatMsgs");
+  const chatInput = document.getElementById("chatInput");
+  const chatSendBtn = document.getElementById("chatSendBtn");
+  const chatClearBtn = document.getElementById("chatClearBtn");
+
+  let ALL = [];
+
+  function showToast(msg) {
+    toastEl.innerHTML = msg;
+    toastEl.classList.add("show");
+    setTimeout(() => toastEl.classList.remove("show"), 3400);
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  function pillForUrgency(u) {
+    if (!u) return `<span class="pill">—</span>`;
+    if (u === "high") return `<span class="pill bad">High</span>`;
+    if (u === "medium") return `<span class="pill warn">Medium</span>`;
+    return `<span class="pill good">Low</span>`;
+  }
+
+  function pillForSentiment(s) {
+    if (!s) return `<span class="pill">—</span>`;
+    if (s === "negative") return `<span class="pill bad">Negative</span>`;
+    if (s === "neutral") return `<span class="pill warn">Neutral</span>`;
+    return `<span class="pill good">Positive</span>`;
+  }
+
+  function parseThemes(themes) {
+    if (!themes) return [];
+    try {
+      const arr = JSON.parse(themes);
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function scoreRow(row) {
+    const urgencyMap = { high: 3, medium: 2, low: 1 };
+    const valueMap   = { high: 3, medium: 2, low: 1 };
+    const sentimentBonus = { negative: 2, neutral: 1, positive: 0 };
+
+    const u = urgencyMap[row.urgency] || 0;
+    const v = valueMap[row.value_impact] || 0;
+    const s = sentimentBonus[row.sentiment] || 0;
+
+    return (u * 3) + (v * 2) + s;
+  }
+
+  function updateRankingHint() {
+    const mode = sortModeEl.value;
+    const u = urgencyFilterEl.value;
+    const s = sentimentFilterEl.value;
+
+    const parts = [];
+    if (mode === "ranked") parts.push("Sorted by <b>Ranked</b>: urgency ×3, value ×2, sentiment bonus.");
+    else parts.push("Sorted by <b>Newest</b> first.");
+
+    const filters = [];
+    if (u) filters.push(`urgency = <b>${u}</b>`);
+    if (s) filters.push(`sentiment = <b>${s}</b>`);
+    if (filters.length) parts.push(`Filters: ${filters.join(", ")}.`);
+
+    rankingHintEl.innerHTML = parts.join(" ");
+  }
+
+  function applyFilters(items) {
+    const q = searchEl.value.trim().toLowerCase();
+    const u = urgencyFilterEl.value;
+    const s = sentimentFilterEl.value;
+
+    return items.filter(row => {
+      if (u && row.urgency !== u) return false;
+      if (s && row.sentiment !== s) return false;
+
+      if (!q) return true;
+
+      const themes = parseThemes(row.themes).join(" ").toLowerCase();
+      const blob = `${row.id} ${row.source} ${row.text} ${row.summary || ""} ${themes}`.toLowerCase();
+      return blob.includes(q);
+    });
+  }
+
+  function sortItems(items) {
+    const mode = sortModeEl.value;
+    if (mode === "newest") return [...items].sort((a,b) => b.id - a.id);
+    return [...items].sort((a,b) => {
+      const sa = scoreRow(a);
+      const sb = scoreRow(b);
+      if (sb !== sa) return sb - sa;
+      return b.id - a.id;
+    });
+  }
+
+  function render() {
+    let items = applyFilters(ALL);
+    items = sortItems(items);
+    countEl.textContent = `${items.length} shown`;
+
+    if (items.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">No results. Try clearing filters or search.</td></tr>`;
+      updateRankingHint();
+      return;
+    }
+
+    tbody.innerHTML = items.map(row => {
+      const themes = parseThemes(row.themes);
+      const themeHtml = themes.length
+        ? `<div class="tags">${themes.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join("")}</div>`
+        : `<span class="muted">—</span>`;
+
+      const summary = row.summary ? escapeHtml(row.summary) : `<span class="muted">Triaging…</span>`;
+      const sc = scoreRow(row);
+
+      return `
+        <tr>
+          <td class="nowrap"><span class="source">#${row.id}</span></td>
+          <td class="nowrap"><span class="score">${sc}</span></td>
+          <td><span class="source">${escapeHtml(row.source)}</span></td>
+          <td>
+            <div>${summary}</div>
+            <div class="small muted" style="margin-top:6px;">${escapeHtml(row.created_at)}</div>
+          </td>
+          <td>${pillForUrgency(row.urgency)}</td>
+          <td>${pillForSentiment(row.sentiment)}</td>
+          <td>${themeHtml}</td>
+        </tr>
+      `;
+    }).join("");
+
+    updateRankingHint();
+  }
+
+  async function health() {
+    const r = await fetch(`${API}/health`);
+    const j = await r.json();
+    statusEl.textContent = j.ok ? `online • ${j.service}` : `offline`;
+  }
+
+  async function load() {
+    statusEl.textContent = "loading…";
+    const r = await fetch(`${API}/feedback?limit=160`);
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "Failed to load feedback");
+    ALL = j.results || [];
+    statusEl.textContent = `online • ${ALL.length} items`;
+    render();
+  }
+
+  async function seedAllSources() {
+    seedAllBtn.disabled = true;
+    seedAllBtn.textContent = "Seeding…";
+    try {
+      const r = await fetch(`${API}/seed`, { method: "POST" });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "Seed failed");
+      showToast(`Seeded <b>${j.inserted}</b> items. Auto-triage runs at ingestion.`);
+      await load();
+    } catch (e) {
+      showToast(e.message || String(e));
+      await load();
+    } finally {
+      seedAllBtn.disabled = false;
+      seedAllBtn.textContent = "Seed demo dataset";
+    }
+  }
+
+  // ChatGPT-style messages
+  function addMsg(role, text) {
+    const row = document.createElement("div");
+    row.className = `msgRow ${role === "user" ? "user" : "bot"}`;
+    const bubble = document.createElement("div");
+    bubble.className = `bubble ${role === "user" ? "user" : "bot"}`;
+    bubble.textContent = text;
+    row.appendChild(bubble);
+    chatMsgs.appendChild(row);
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+  }
+
+  async function sendChat() {
+    const q = (chatInput.value || "").trim();
+    if (!q) return;
+
+    addMsg("user", q);
+    chatInput.value = "";
+    chatInput.focus();
+
+    chatSendBtn.disabled = true;
+    chatSendBtn.textContent = "Sending…";
+
+    try {
+      const r = await fetch(`${API}/assistant`, {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ question: q })
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "Assistant failed");
+      addMsg("bot", j.answer);
+    } catch (e) {
+      addMsg("bot", `Error: ${e.message || String(e)}`);
+    } finally {
+      chatSendBtn.disabled = false;
+      chatSendBtn.textContent = "Send";
+    }
+  }
+
+  chatSendBtn.addEventListener("click", sendChat);
+  chatClearBtn.addEventListener("click", () => {
+    chatMsgs.innerHTML = "";
+    chatInput.value = "";
+    chatInput.focus();
+  });
+
+  // Enter to send, Shift+Enter for newline
+  chatInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && !ev.shiftKey) {
+      ev.preventDefault();
+      sendChat();
+    }
+  });
+
+  seedAllBtn.addEventListener("click", seedAllSources);
+  refreshBtn.addEventListener("click", load);
+
+  searchEl.addEventListener("input", render);
+  urgencyFilterEl.addEventListener("change", render);
+  sentimentFilterEl.addEventListener("change", render);
+  sortModeEl.addEventListener("change", render);
+
+  (async function init(){
+    // Initial assistant message
+    addMsg("bot", "Hi — I’m Problapary. Seed the dataset, then ask me for themes, urgency patterns, or what’s trending across sources (summaries only).");
+    try {
+      await health();
+      await load();
+    } catch (e) {
+      statusEl.textContent = "offline";
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">Failed to load. ${escapeHtml(e.message || String(e))}</td></tr>`;
+      updateRankingHint();
+    }
+  })();
+</script>
+</body>
+</html>
